@@ -1,0 +1,879 @@
+<title>ORBIT-7 탈출</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: HUD bar on top → illustrated room scene you click into → hardware-style device panels as overlays. Single dark world (inside a station). */
+:root{
+  --void:#080b13; --hull:#111725; --panel:#171f31; --panel-2:#1d2740; --line:#2c3854;
+  --fg:#e8ecf6; --dim:#8f9ab6;
+  --amber:#ffb547; --o2:#6fd6ff; --ok:#5fe0a0; --alert:#ff5d62;
+  --c-red:#ff6363; --c-blue:#58aaff; --c-yellow:#ffc842;
+  --screen:#04120d; --phosphor:#7dffc0;
+  --f-display:"Chakra Petch","IBM Plex Sans KR",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{background:var(--void);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6;overflow:hidden}
+#stars{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+#vignette{position:fixed;inset:0;pointer-events:none;z-index:40}
+body.critical #vignette{animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{box-shadow:inset 0 0 120px 20px rgba(255,40,50,.12)}50%{box-shadow:inset 0 0 200px 70px rgba(255,40,50,.4)}}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:60;background:var(--alert);opacity:0}
+#flash.on{animation:flash .45s}
+@keyframes flash{0%{opacity:.35}100%{opacity:0}}
+
+#app{position:relative;z-index:2;height:100%;display:grid;grid-template-rows:auto 1fr}
+.hud{background:rgba(8,11,19,.94);border-bottom:1px solid var(--line);padding-block:9px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:8px}
+.hud-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:700;letter-spacing:.14em;color:var(--amber);font-size:15px}
+.o2{flex:1 1 220px;display:flex;align-items:center;gap:10px;min-width:0}
+.o2 span.l{font-family:var(--f-mono);font-size:12px;color:var(--dim)}
+.o2-bar{flex:1;height:12px;border-radius:2px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden;position:relative}
+.o2-fill{position:absolute;inset:0 auto 0 0;width:100%;background:var(--o2);transition:width .3s linear}
+.o2-bar::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 9%,rgba(8,11,19,.7) 9% 10%)}
+.o2-num{font-family:var(--f-mono);font-weight:600;font-variant-numeric:tabular-nums;min-width:48px;text-align:right;color:var(--o2)}
+body.critical .o2-fill{background:var(--alert)} body.critical .o2-num{color:var(--alert)}
+.clock{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--dim);font-size:14px}
+.icon-btn{background:none;border:1px solid var(--line);color:var(--dim);font:500 12px var(--f-mono);padding:5px 9px;border-radius:3px;cursor:pointer}
+.icon-btn:hover{color:var(--fg)}
+.track{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.trk{border:1px solid var(--line);border-radius:3px;padding:4px 8px;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:rgba(23,31,49,.6)}
+.trk.on{border-color:var(--amber);color:var(--amber)} .trk.done{border-color:rgba(95,224,160,.5);color:var(--ok)}
+
+main{overflow-y:auto;padding-block:18px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1100px;margin:0 auto;display:grid;gap:14px}
+.console{max-width:760px;width:100%;margin:0 auto;background:rgba(23,31,49,.94);border:1px solid var(--line);border-radius:4px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.console::before,.console::after{content:"";position:absolute;width:26px;height:26px}
+.console::before{left:-1px;top:-1px;border-left:2px solid var(--amber);border-top:2px solid var(--amber)}
+.console::after{right:-1px;bottom:-1px;border-right:2px solid var(--amber);border-bottom:2px solid var(--amber)}
+.c-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:11px 20px;border-bottom:1px solid var(--line);font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;color:var(--dim)}
+.c-head b{color:var(--amber);font-weight:600}
+.c-body{padding:22px 20px 24px;display:grid;gap:16px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(40px,9vw,72px);letter-spacing:.06em} h1 span{color:var(--amber)}
+h2{font-size:clamp(22px,4.5vw,30px)} h3{font-size:18px;letter-spacing:.03em}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.16em;color:var(--amber);text-transform:uppercase}
+p{margin:0}
+.story{color:#cbd3e8;max-width:62ch;white-space:pre-line}
+.aria{border-left:2px solid var(--o2);padding:9px 14px;background:rgba(111,214,255,.07);font-size:15px}
+.aria b{font-family:var(--f-mono);color:var(--o2);font-size:12px;letter-spacing:.12em;display:block}
+.small{font-size:13px;color:var(--dim)}
+.btn{font:600 16px var(--f-display);letter-spacing:.06em;background:var(--amber);color:#1b1404;border:0;border-radius:3px;padding:11px 20px;cursor:pointer;justify-self:start}
+.btn:hover{filter:brightness(1.08)} .btn:disabled{opacity:.4;cursor:default}
+.btn.ghost{background:none;color:var(--fg);border:1px solid var(--line)}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+:focus-visible{outline:2px solid var(--o2);outline-offset:2px}
+.speed{display:flex;gap:6px;flex-wrap:wrap}
+.speed button{font:500 14px var(--f-body);background:var(--panel-2);color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:7px 12px;cursor:pointer}
+.speed button[aria-pressed="true"]{border-color:var(--o2);color:var(--o2)}
+
+/* ---------- room scene ---------- */
+.scene-box{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#000;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.scene{display:block;width:100%;height:auto}
+.hs{cursor:pointer}
+.hs .art{transition:filter .2s}
+.hs:hover .art,.hs:focus-visible .art{filter:drop-shadow(0 0 10px rgba(255,200,120,.7)) brightness(1.15)}
+.hs:focus{outline:none}
+.ping{fill:none;stroke:var(--amber);stroke-width:2;stroke-dasharray:8 6;opacity:.55;animation:ping 2.2s ease-in-out infinite}
+@keyframes ping{50%{opacity:.12}}
+.blink{animation:blink 1.4s steps(2) infinite}
+@keyframes blink{50%{opacity:.15}}
+.spark{animation:blink .35s steps(2) infinite}
+.door-l,.door-r{transition:transform 1s cubic-bezier(.7,0,.3,1)}
+.open .door-l{transform:translateX(-66px)} .open .door-r{transform:translateX(66px)}
+.aria-bar{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);background:rgba(17,23,37,.92);border-radius:4px;padding:10px 14px;font-size:15px}
+.aria-bar .eye{flex:none;width:14px;height:14px;border-radius:50%;background:var(--o2);box-shadow:0 0 12px var(--o2);margin-top:5px}
+.spots{display:flex;flex-wrap:wrap;gap:8px}
+.spot{display:flex;align-items:center;gap:8px;font:500 14px var(--f-body);background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:3px;padding:8px 12px;cursor:pointer}
+.spot:hover{border-color:var(--amber)}
+.spot .st{font-family:var(--f-mono);font-size:12px;color:var(--dim)}
+.spot.done{border-color:rgba(95,224,160,.45)} .spot.done .st{color:var(--ok)}
+.shape{display:inline-block;vertical-align:-2px}
+
+/* ---------- device modal (hardware) ---------- */
+#modal{position:fixed;inset:0;z-index:30;background:rgba(3,5,10,.72);backdrop-filter:blur(3px);display:grid;place-items:center;
+  padding-block:max(14px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));overflow-y:auto}
+.dev{width:min(760px,100%);border-radius:10px;padding:14px;position:relative;
+  background:linear-gradient(160deg,#4a5368,#2a3142 40%,#1f2533 60%,#3a4255);box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.18),inset 0 -2px 0 rgba(0,0,0,.4)}
+.dev.shake{animation:shake .4s}
+@keyframes shake{20%{transform:translateX(-8px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+.screw{position:absolute;width:10px;height:10px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#c9cfdb,#5b6274);box-shadow:0 1px 1px rgba(0,0,0,.5)}
+.screw::after{content:"";position:absolute;left:2px;right:2px;top:4px;height:2px;background:#3a4050;transform:rotate(35deg)}
+.screw.a{left:7px;top:7px}.screw.b{right:7px;top:7px}.screw.c{left:7px;bottom:7px}.screw.d{right:7px;bottom:7px}
+.dev-top{display:flex;align-items:center;gap:10px;padding:4px 12px 12px;font-family:var(--f-mono);font-size:12px;color:#c9d0de;letter-spacing:.1em}
+.dev-top .t{flex:1;min-width:0}
+.dev-top .t b{display:block;font-family:var(--f-display);font-size:18px;letter-spacing:.04em;color:#fff}
+.close{background:#1a1f2b;color:#d8deea;border:1px solid #5a6276;border-radius:3px;font:500 13px var(--f-body);padding:6px 12px;cursor:pointer}
+.glass{background:var(--screen);border-radius:6px;border:2px solid #0d1117;box-shadow:inset 0 0 40px rgba(0,0,0,.8),inset 0 0 0 1px rgba(125,255,192,.08);padding:18px 16px;position:relative;display:grid;gap:14px;overflow:hidden}
+.glass::after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
+.glass .prompt{color:var(--phosphor);font-size:15px}
+.en{font-family:var(--f-mono);font-size:clamp(15px,3.2vw,18px);line-height:1.55;color:var(--fg)}
+.ko{font-size:16px;font-weight:500}
+.blank{display:inline-block;min-width:64px;border-bottom:2px solid var(--amber);text-align:center;color:var(--amber)}
+.clue{border:1px dashed rgba(125,255,192,.3);border-radius:4px;padding:10px 12px;display:grid;gap:6px;font-size:15px}
+table.data{border-collapse:collapse;font-family:var(--f-mono);font-size:14px}
+table.data th,table.data td{border:1px solid rgba(125,255,192,.25);padding:6px 12px;text-align:center}
+table.data th{color:var(--phosphor);font-weight:400}
+.msg{font-family:var(--f-mono);font-size:14px;color:var(--alert);min-height:1.3em}
+.tools{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 6px 2px}
+.hint-btn{font:500 14px var(--f-body);background:#12233a;color:var(--o2);border:1px solid rgba(111,214,255,.45);border-radius:3px;padding:7px 12px;cursor:pointer}
+.hint-btn:disabled{opacity:.4;cursor:default}
+.hint-box{font-size:14px;color:var(--o2);flex:1 1 220px}
+
+.opts{display:grid;gap:8px}
+.opt,.line-btn{display:flex;gap:12px;align-items:flex-start;text-align:left;font:500 15px var(--f-mono);background:rgba(125,255,192,.04);color:var(--fg);border:1px solid rgba(125,255,192,.22);border-radius:3px;padding:10px 12px;cursor:pointer;width:100%}
+.opt .k,.line-btn .k{color:var(--phosphor);flex:none}
+.opt:hover:not(:disabled),.line-btn:hover{border-color:var(--phosphor)}
+.opt:disabled{opacity:.3;text-decoration:line-through;cursor:default}
+.line-btn[aria-pressed="true"]{border-color:var(--amber);background:rgba(255,181,71,.12)}
+.line-btn[aria-pressed="true"] .k{color:var(--amber)}
+
+.order-line{min-height:54px;border:1px dashed var(--amber);border-radius:3px;padding:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.order-line:empty::before{content:"단어 조각을 순서대로 누르세요";color:var(--dim);font-size:14px}
+.pool{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:500 15px var(--f-mono);background:#0d1d17;color:var(--fg);border:1px solid rgba(125,255,192,.3);border-radius:3px;padding:7px 11px;cursor:pointer}
+.order-line .chip{border-color:var(--amber)}
+
+.wires{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px}
+@media (max-width:560px){.wires{grid-template-columns:1fr}}
+.wcol{display:grid;gap:8px;align-content:start}
+.wl,.wr{display:flex;gap:10px;align-items:center;text-align:left;font:500 15px var(--f-mono);background:rgba(125,255,192,.04);color:var(--fg);border:1px solid rgba(125,255,192,.22);border-radius:3px;padding:9px 10px;cursor:pointer;width:100%}
+.wl small{display:block;font-family:var(--f-body);color:var(--dim);font-size:13px}
+.wl[aria-pressed="true"]{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
+.plug{flex:none;width:14px;height:14px;border-radius:3px;border:2px solid currentColor}
+.plug.fill{background:currentColor}
+.wr .plugs{display:flex;gap:4px;margin-left:auto}
+
+.wheels{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;padding:6px 0}
+.wheel{display:grid;gap:4px;justify-items:center}
+.wheel button{width:46px;height:30px;background:#1b2231;color:#cfd6e4;border:1px solid #47506a;border-radius:3px;cursor:pointer;font-size:14px}
+.wheel .ch{width:46px;height:58px;display:grid;place-items:center;font:600 30px var(--f-mono);color:var(--amber);border-radius:4px;
+  background:linear-gradient(180deg,#0a0d14,#2a3142 22%,#3a4256 50%,#2a3142 78%,#0a0d14);border:1px solid #59627a;text-shadow:0 0 8px rgba(255,181,71,.5)}
+.wheels .dot{font:600 30px var(--f-mono);color:var(--amber)} .wheels .unit{font:500 15px var(--f-mono);color:var(--dim);margin-left:4px}
+
+.tokens{display:flex;flex-wrap:wrap;gap:4px}
+.tok{font:500 17px var(--f-mono);background:none;color:var(--fg);border:1px solid transparent;border-bottom:1px dashed rgba(125,255,192,.3);border-radius:2px;padding:3px 6px;cursor:pointer}
+.tok:hover{border-color:var(--dim)}
+.tok[aria-pressed="true"]{border-color:var(--alert);color:var(--alert);background:rgba(255,93,98,.12)}
+.tok.fixed{color:var(--ok);border-color:transparent}
+
+.cls{display:grid;gap:8px}
+.cls-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border-bottom:1px solid rgba(125,255,192,.12);padding-bottom:8px}
+@media (max-width:560px){.cls-row{grid-template-columns:1fr}}
+.cls-row .en{font-size:15px}
+.cls-row mark{background:none;color:var(--amber);font-weight:600;text-decoration:underline}
+.seg{display:flex;gap:4px}
+.seg button{font:500 13px var(--f-body);background:#0d1d17;color:var(--dim);border:1px solid rgba(125,255,192,.25);border-radius:3px;padding:5px 9px;cursor:pointer}
+.seg button[aria-pressed="true"]{color:#08130e;background:var(--phosphor);border-color:var(--phosphor)}
+
+.solved{border:1px solid var(--ok);background:rgba(95,224,160,.08);border-radius:4px;padding:12px 14px;display:grid;gap:8px}
+.solved .t{font-family:var(--f-mono);color:var(--ok);font-weight:600;letter-spacing:.1em}
+.big-digit{display:flex;align-items:center;gap:12px;font:600 44px var(--f-mono)}
+.manual{display:grid;gap:12px;color:#d7dded}
+.manual .sec{display:grid;gap:4px}
+.manual .sec b{color:var(--phosphor);font-family:var(--f-mono);font-size:13px;letter-spacing:.08em}
+.manual code{font-family:var(--f-mono);color:var(--amber)}
+.manual .ex{font-family:var(--f-mono);font-size:14px;color:#aeb8cf}
+
+.keypad-wrap{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) minmax(0,240px);align-items:start}
+@media (max-width:560px){.keypad-wrap{grid-template-columns:1fr}}
+.slots{display:flex;gap:8px}
+.slot{width:52px;height:62px;border:1px solid #47506a;border-radius:3px;display:grid;place-items:center;font:600 30px var(--f-mono);color:var(--amber);background:#05070c}
+.keys{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.keys button{font:600 20px var(--f-mono);background:linear-gradient(180deg,#3a4256,#252b3a);color:#e6eaf3;border:1px solid #59627a;border-radius:4px;padding:11px 0;cursor:pointer;box-shadow:0 2px 0 #10131b}
+.keys button:active{transform:translateY(2px);box-shadow:none}
+.keys .go{background:linear-gradient(180deg,#ffc56b,#e59a2a);color:#1b1404;border-color:#ffb547}
+.order-sym{display:flex;gap:14px;align-items:center;font-family:var(--f-mono)}
+
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:560px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat{border:1px solid var(--line);border-radius:3px;padding:10px 12px}
+.stat .v{font:600 22px var(--f-mono);font-variant-numeric:tabular-nums}
+.stat .l{font-size:12px;color:var(--dim)}
+.grade{font:700 88px/1 var(--f-display);color:var(--amber)}
+.review{display:grid;gap:10px}
+.rv{border-left:2px solid var(--alert);padding:6px 12px;font-size:15px;display:grid;gap:2px}
+.rv .m{font-family:var(--f-mono);font-size:12px;color:var(--dim)}
+.rv .a{font-family:var(--f-mono);color:var(--ok)}
+.pod{width:80px;height:120px;margin:0 auto}
+.pod.launch{animation:launch 2.4s cubic-bezier(.6,0,.9,.4) forwards}
+@keyframes launch{15%{transform:translateY(6px)}100%{transform:translateY(-140vh)}}
+.unlock{animation:unlock .9s ease-out}
+@keyframes unlock{0%{opacity:0;transform:scale(.6);filter:blur(6px)}60%{opacity:1;transform:scale(1.08)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="app">
+  <header class="hud" id="hud" hidden>
+    <div class="hud-row">
+      <div class="brand">ORBIT-7</div>
+      <div class="o2"><span class="l">O₂</span><div class="o2-bar" id="o2bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-label="남은 산소"><div class="o2-fill" id="o2fill"></div></div><div class="o2-num" id="o2num">100%</div></div>
+      <div class="clock" id="clock">00:00</div>
+      <button class="icon-btn" id="soundBtn" type="button">소리 켜짐</button>
+    </div>
+    <div class="track" id="track"></div>
+  </header>
+  <main><div class="wrap" id="view"></div></main>
+</div>
+<div id="modal" hidden></div>
+
+<script>
+/* =====================================================================
+   방·장치 데이터 (선생님이 고칠 수 있는 부분)
+   kind: multi(여러 줄 고르기) / wires(배선 연결) / wheel(다이얼 자물쇠) / order(단어 배열)
+         choice(객관식, 보기는 매번 섞임) / fix(틀린 단어 누르고 고치기) / classify(분류) / tapmulti(틀린 단어 모두 찾기)
+   color: red ▲ / blue ● / yellow ■ — 해결하면 그 색 램프에 digit이 켜짐
+   ===================================================================== */
+const ROOMS = [
+{ id:"life", name:"생명유지실", en:"LIFE SUPPORT", tint:{w1:"#1d2c35",w2:"#111a21",light:"#c6f4ff"},
+  story:"수면 캡슐에서 깨어났다. 경고등이 붉게 깜빡이고, 산소 순환 장치는 멈춰 있다.\n다른 승무원들은 보이지 않는다. 생명유지실 문도 잠겨 있다.",
+  aria:"저는 정거장 AI ARIA예요. 이 방의 장치 세 개를 고칠 때마다 램프에 숫자가 하나씩 켜져요. 문 위 표시판의 모양 순서대로 숫자를 입력하면 문이 열려요.",
+  manual:[
+    ["make / let / have + 목적어 + 동사원형","~가 …하게 하다", "The storm made everyone stay home."],
+    ["의미 차이","make 억지로 시키다 · have 부탁하다, 시키다 · let 허락하다", "The teacher doesn't let us use our phones during class."],
+    ["help + 목적어 + 동사원형 / to부정사","둘 다 가능", "I helped him (to) carry the box."],
+    ["get + 목적어 + to부정사","get만 to부정사를 써요", "Mom got me to clean my room."]],
+  door:["blue","red","yellow"], refill:20,
+  cleared:"산소 순환 장치가 다시 돌기 시작했다. 산소가 20% 회복되었다!",
+  devices:[
+  { id:"l1", kind:"multi", art:"terminal", slot:1, color:"red", digit:3, title:"정비 기록 단말기",
+    prompt:"오늘 정비 기록 7줄 중 어법상 틀린 문장을 모두 골라 삭제하세요. 하나라도 빠지거나 잘못 고르면 접근이 거부됩니다.",
+    mode:"wrong",
+    lines:[["The captain made the crew check the oxygen tanks.",1],["ARIA didn't let us to open the lock.",0],["Dr. Kim had the robot carry the heavy boxes.",1],
+           ["The alarm made everyone stayed calm.",0],["I got my friend to help me with the repair.",1],["The clerk let the customer try on the space suit.",1],
+           ["The engineer helped me fixing the air filter.",0]],
+    hint:"목적어 뒤 동사 모양만 보세요. make·let·have는 동사원형, get은 to부정사, help는 둘 다 가능해요.",
+    explain:"틀린 문장은 2·4·7번 → let us <b>open</b>, made everyone <b>stay</b>, helped me <b>fix / to fix</b>. 틀린 기록 3건을 지우자 빨간 램프에 3이 켜졌다.",
+    review:"2번 let us open · 4번 made everyone stay · 7번 helped me fix(to fix)"},
+  { id:"l2", kind:"wires", art:"junction", slot:2, color:"blue", digit:8, title:"산소 밸브 배선함",
+    prompt:"끊어진 전선 4개를 알맞은 끝부분에 연결하세요. 우리말 뜻과 어법이 모두 맞아야 전류가 흐릅니다. (왼쪽을 누르고 → 오른쪽을 누르기)",
+    left:[["The storm made everyone","폭풍 때문에 모두가 집에 머물렀다.","stay home."],
+          ["The manager got the clerk","매니저는 점원에게 물건을 스캔하게 했다.","to scan the items."],
+          ["My mom doesn't let me","엄마는 내가 용돈을 다 써 버리게 두지 않으신다.","spend all my money."],
+          ["Jake had his brother","Jake는 동생에게 가방을 들게 했다.","carry the bag."]],
+    right:["stay home.","staying home.","to scan the items.","scan the items.","spend all my money.","to spend all my money.","carry the bag.","carried the bag."],
+    hint:"get 하나만 to부정사와 연결돼요. 나머지 셋은 모두 동사원형으로 시작하는 끝부분이에요.",
+    explain:"made everyone <b>stay</b> · got the clerk <b>to scan</b> · doesn't let me <b>spend</b> · had his brother <b>carry</b>",
+    review:"stay home / to scan the items / spend all my money / carry the bag"},
+  { id:"l3", kind:"wheel", art:"locker", slot:3, color:"yellow", digit:5, title:"대여 사물함",
+    charset:"ABCDEFGHIJKLMNOPQRSTUVWXYZ", pattern:"####", answer:["RENT"],
+    prompt:"사물함 문에 메모가 붙어 있다. 메모의 빈칸에 들어갈 단어가 비밀번호다.",
+    clue:`<p class="en">"This app lets you <span class="blank">????</span> a space bike for one hour. You don't have to buy one."</p><p class="small">뒷면에 적힌 글: to pay money to use something for a short time</p>`,
+    hint:"'빌리다, 대여하다'라는 뜻이에요. 명사형은 rental이에요.",
+    explain:"<b>rent</b> (빌리다, 대여하다) — lets you rent: let + 목적어 + 동사원형",
+    review:"RENT (빌리다, 대여하다)"}
+  ]},
+{ id:"comms", name:"통신실", en:"COMMUNICATIONS", tint:{w1:"#1c2339",w2:"#0f1424",light:"#d0e0ff"},
+  story:"숨쉬기가 한결 편해졌다. 통신실 모니터에는 노이즈만 가득하다.\n지구 관제 센터와 연결해야 구조 신호를 보낼 수 있다.",
+  aria:"통신실 장치들은 '의문사 + to부정사'로 잠겨 있어요. 이번에도 장치 세 개, 그리고 문이에요.",
+  manual:[
+    ["what / how / when / where + to부정사","무엇을 ~할지 · 어떻게 ~할지(~하는 방법) · 언제 ~할지 · 어디서 ~할지", "I don't know what to say to him."],
+    ["who(m) / which + to부정사","누구에게 ~할지 · 어느 것을 ~할지", "We can't decide which to choose."],
+    ["역할","주어, 보어, 목적어로 쓰여요", "Where to go on the weekend is my decision. / My question is how to solve this puzzle."],
+    ["주의","why는 의문사+to부정사로 쓰지 않아요 · = 의문사 + 주어 + should + 동사원형", "I don't know what to do. = I don't know what I should do."]],
+  door:["yellow","blue","red"],
+  cleared:"관제 센터 연결 성공! 구조선이 오고 있지만, 정거장을 떠나려면 탈출 포드 연료가 필요하다.",
+  devices:[
+  { id:"c1", kind:"multi", art:"printer", slot:1, color:"blue", digit:2, title:"통신 기록 출력기",
+    prompt:"이번에는 반대예요. 출력된 통신 기록 6줄 중 어법상 올바른 문장만 모두 골라 저장하세요.",
+    mode:"right",
+    lines:[["Can you tell me how to unlock the screen?",1],["I don't know why to answer this signal.",0],["Where to send the message is up to you.",1],
+           ["The question is what to do next.",1],["She showed us how use the scanner.",0],["We talked about when to leaving the station.",0]],
+    hint:"why는 to부정사와 함께 쓰지 않아요. 의문사 다음에는 'to + 동사원형'이 와야 해요.",
+    explain:"올바른 문장은 1·3·4번. 3번은 주어, 4번은 보어로 쓰인 의문사+to부정사예요. 2 why(✕) · 5 how <b>to use</b> · 6 when <b>to leave</b>",
+    review:"올바른 문장 1·3·4번"},
+  { id:"c2", kind:"wheel", art:"radio", slot:2, color:"red", digit:6, title:"무전 주파수 다이얼",
+    charset:"0123456789", pattern:"###.#", answer:["4345"],
+    prompt:"관제 센터의 주파수는 아래 네 빈칸에 들어갈 의문사의 글자 수를 차례대로 이은 숫자다. 다이얼을 맞추세요.",
+    clue:`<p class="en">① I don't know <span class="blank">?</span> to say to the captain. I made a big mistake.</p>
+<p class="en">② I forgot <span class="blank">?</span> to unlock the door. Is there a password?</p>
+<p class="en">③ Tell us <span class="blank">?</span> to leave: now or after the storm?</p>
+<p class="en">④ Should we put the box on the left shelf or the right shelf? Tell us <span class="blank">?</span> to put it.</p>`,
+    hint:"빈칸 뒤 내용이 '말할 내용'인지, '방법'인지, '시간'인지, '장소'인지 보세요. 단어를 정한 뒤 글자 수를 세요.",
+    explain:"① <b>what</b>(4) ② <b>how</b>(3) ③ <b>when</b>(4) ④ <b>where</b>(5) → 434.5 MHz",
+    review:"what · how · when · where → 434.5"},
+  { id:"c3", kind:"order", art:"tablet", slot:3, color:"yellow", digit:9, title:"스마트 스피커 태블릿",
+    prompt:"스마트 스피커의 음성 명령이 뒤섞였다. 우리말에 맞게 단어 조각을 배열하세요. (필요 없는 조각 2개)",
+    ko:"스마트 스피커는 길을 어떻게 알려 줄지 알고 있다.",
+    chips:["The smart speaker","knows","how","to","give","directions","gives","what"],
+    answer:["The smart speaker","knows","how","to","give","directions"],
+    hint:"how + to + 동사원형. give directions = 길을 알려 주다",
+    explain:"The smart speaker knows <b>how to give</b> directions.",
+    review:"The smart speaker knows how to give directions."}
+  ]},
+{ id:"lab", name:"연구실", en:"RESEARCH LAB", tint:{w1:"#283040",w2:"#181d29",light:"#ffffff"},
+  story:"연구실 냉동고 안에 탈출 포드 연료 카트리지가 보관되어 있다.\n하지만 샘플 기록이 손상되어 어느 것이 연료인지 알 수 없다.",
+  aria:"연구실은 '원급 비교 as ~ as' 코드예요. 비교 대상과 원급을 꼼꼼히 확인하세요.",
+  manual:[
+    ["as + 형용사/부사 원급 + as","~만큼 …한[하게]", "My bag is as heavy as yours. / He runs as fast as his friend."],
+    ["not as + 원급 + as","~만큼 …하지 않은", "The question was not as easy as the first one."],
+    ["바꿔 쓰기","not as easy as = 비교급으로 바꿀 수 있어요", "= The first question was easier than this one."],
+    ["주의","as taller as ✕ · as tall than ✕ · 비교 대상의 형태를 맞추기", "My bag is as heavy as you. ✕ → yours"]],
+  door:["red","yellow","blue"],
+  cleared:"냉동고에서 연료 카트리지를 꺼냈다. 이제 엔진실로!",
+  devices:[
+  { id:"b1", kind:"choice", art:"freezer", slot:3, color:"red", digit:7, title:"샘플 냉동고", fixed:true,
+    prompt:"손상된 기록에 남은 단서로 진짜 연료 카트리지를 찾으세요. 고른 샘플의 보관함 번호가 램프 숫자가 됩니다.",
+    table:[["샘플","무게","온도","보관함"],["A","12 kg","−20°C","2"],["B","18 kg","35°C","9"],["C","12 kg","35°C","4"],["D","18 kg","−20°C","7"],["E","18 kg","50°C","1"]],
+    clue:`<p class="en">"The fuel cartridge is as heavy as Sample B, but it is not Sample B. It is not as hot as Sample C."</p>`,
+    options:["Sample A","Sample B","Sample C","Sample D","Sample E"], answer:3,
+    hint:"as heavy as B → 무게가 18 kg인 샘플. not as hot as C → C(35°C)보다 덜 뜨거운 샘플.",
+    explain:"B와 무게가 같은 샘플은 D, E. 그중 C(35°C)만큼 뜨겁지 않은 것은 D(−20°C) → 보관함 <b>7</b>",
+    review:"Sample D (18 kg, −20°C, 보관함 7)"},
+  { id:"b2", kind:"choice", art:"monitor", slot:2, color:"blue", digit:1, title:"분석 보고서 모니터",
+    prompt:"보고서의 문장과 의미가 같은 문장을 고르세요.",
+    en:"The new space suit is not as heavy as the old one.",
+    options:["The old space suit is heavier than the new one.","The new space suit is heavier than the old one.","The old space suit is as heavy as the new one.","The new space suit is not lighter than the old one."], answer:0,
+    hint:"not as heavy as = 덜 무겁다. 그러면 어느 쪽이 더 무거울까요?",
+    explain:"새 우주복이 옛것만큼 무겁지 않다 = <b>옛 우주복이 더 무겁다</b>",
+    review:"The old space suit is heavier than the new one."},
+  { id:"b3", kind:"fix", art:"scope", slot:1, color:"yellow", digit:4, title:"현미경 데이터 판독기",
+    prompt:"판독기에 오류 문장 3개가 떴다. 각 문장에서 틀린 단어를 누르고, 알맞은 말로 고치세요.",
+    items:[["My helmet is as heavy as *you.",["yours","your","yourself","you're"]],
+           ["The backpack wasn't as *bigger as my old one.",["big","biggest","more big","so big"]],
+           ["This secondhand phone is as good *than a new one.",["as","so","more","that"]]],
+    hint:"①은 무엇과 무엇을 비교하는지(헬멧 ↔ 헬멧), ②는 as 사이의 형태, ③은 as ~ as 짝을 확인하세요.",
+    explain:"as heavy as <b>yours</b>(your helmet) · as <b>big</b> as · as good <b>as</b>",
+    review:"you → yours · bigger → big · than → as"}
+  ]},
+{ id:"engine", name:"엔진실", en:"ENGINE ROOM", tint:{w1:"#2e231e",w2:"#181110",light:"#ffd4a0"},
+  story:"엔진실은 열기로 가득하다. 탈출 포드 엔진에 연료를 넣고 점화 준비를 해야 한다.\n엔진 콘솔이 마지막 보안 점검을 요구한다.",
+  aria:"엔진실은 '가주어 it'이에요. 문장의 it이 어떤 it인지 구별하는 게 핵심이에요.",
+  manual:[
+    ["가주어 it","긴 to부정사 주어를 뒤로 보내고 it을 주어 자리에", "To learn new languages is interesting. → It is interesting to learn new languages."],
+    ["해석","가주어 it은 해석하지 않아요", "It is helpful to write down your goals. (목표를 적어 두는 것은 도움이 된다.)"],
+    ["it 구별 ① 대명사","'그것' — 앞에 나온 것을 가리킴", "I lost my pen. It was new."],
+    ["it 구별 ② 비인칭 주어","날씨, 시간, 거리 — 해석하지 않음", "It is sunny today."]],
+  door:["yellow","red","blue"],
+  cleared:"연료 주입 완료. 엔진 예열이 시작되었다. 남은 곳은 에어록뿐!",
+  devices:[
+  { id:"e1", kind:"classify", art:"terminal", slot:1, color:"red", digit:3, title:"엔진 기록 분석기",
+    prompt:"엔진 기록의 it을 모두 분류하세요. 분석이 끝나면 '가주어 it'의 개수가 램프에 켜집니다.",
+    cats:["가주어","대명사","비인칭"],
+    items:[["It is not safe to share your personal information with AI.",0],["It is very cold in the engine room.",2],["I found an old robot. It was broken.",1],
+           ["It is hard to understand your explanation.",0],["It is three o'clock now.",2],["It is important to use AI wisely.",0],["Look at the screen. It shows the fuel level.",1]],
+    hint:"뒤에 to부정사가 있으면 가주어, 앞에 나온 물건을 가리키면 대명사, 날씨·시간이면 비인칭이에요.",
+    explain:"가주어 1·4·6 / 대명사 3·7 / 비인칭 2·5 → 가주어 it <b>3개</b>",
+    review:"가주어 1·4·6 · 대명사 3·7 · 비인칭 2·5"},
+  { id:"e2", kind:"order", art:"core", slot:2, color:"blue", digit:5, title:"엔진 코어 제어판",
+    prompt:"제어판의 경고문을 가주어 It으로 시작하는 문장으로 다시 조립하세요. (필요 없는 조각 2개)",
+    en:"To trust AI blindly is dangerous.",
+    chips:["It","is","dangerous","to trust","AI","blindly","That","trusting"],
+    answer:["It","is","dangerous","to trust","AI","blindly"],
+    hint:"It + is + 형용사 + to부정사(진주어). 가주어로 That은 쓰지 않아요.",
+    explain:"<b>It</b> is dangerous <b>to trust</b> AI blindly. (AI를 맹목적으로 믿는 것은 위험하다.)",
+    review:"It is dangerous to trust AI blindly."},
+  { id:"e3", kind:"wheel", art:"valve", slot:3, color:"yellow", digit:6, title:"연료 밸브 잠금장치",
+    charset:"ABCDEFGHIJKLMNOPQRSTUVWXYZ", pattern:"####", answer:["COPY"],
+    prompt:"밸브에 새겨진 문장의 빈칸 단어가 비밀번호다.",
+    clue:`<p class="en">"It is not right to <span class="blank">????</span> your friend's homework."</p><p class="small">단서: to make or write something exactly the same as another thing</p>`,
+    hint:"'베끼다, 복사하다'라는 뜻이에요. c로 시작해요.",
+    explain:"It is not right to <b>copy</b> your friend's homework. (친구의 숙제를 베끼는 것은 옳지 않다.)",
+    review:"COPY (베끼다, 복사하다)"}
+  ]},
+{ id:"airlock", name:"에어록", en:"AIRLOCK", tint:{w1:"#22262f",w2:"#13161c",light:"#ffe6b0"},
+  story:"탈출 포드 해치 앞에 섰다. 엔진은 예열을 마쳤다.\n그런데 ARIA의 마지막 메시지가 손상되어 해치가 열리지 않는다.",
+  aria:"제 메시지에 오류가 4개 있어요. 틀린 단어만 정확히 찾아 주면 해치가 열려요. 지금까지 배운 문법이 모두 나와요.",
+  manual:[
+    ["사역동사","make / let / have + 목적어 + 동사원형 · get + 목적어 + to부정사",""],
+    ["의문사 + to부정사","what / how / when / where / which + to + 동사원형",""],
+    ["as 원급 as","as 사이에는 원급, 짝은 as",""],
+    ["가주어 it","It is + 형용사 + to부정사",""]],
+  door:null,
+  devices:[
+  { id:"a1", kind:"tapmulti", art:"aria", slot:2, color:null, digit:null, title:"ARIA 메인 콘솔",
+    prompt:"ARIA의 메시지에서 어법상 틀린 단어 4개를 모두 눌러 표시한 뒤 전송하세요.",
+    text:"It is hard to know what *doing now. The storm made the station shake. Please let me *to guide you. The pod is not as *bigger as the old one, but it is safe. I will help you find the pod. *That is important to stay calm.",
+    hint:"틀린 곳은 문장마다 하나씩, 모두 네 문장에 있어요. 두 문장은 완전히 맞는 문장이에요.",
+    explain:"what <b>to do</b> · let me <b>guide</b> · as <b>big</b> as · <b>It</b> is important to stay calm. (made the station shake, help you find는 맞는 표현)",
+    review:"doing → to do · to(guide) 삭제 · bigger → big · That → It"}
+  ]}
+];
+
+/* ===================================================================== */
+const SPEEDS={slow:{label:"느림 · 약 30분",sec:18},normal:{label:"보통 · 약 22분",sec:13},fast:{label:"빠름 · 약 15분",sec:9}};
+const WRONG_COST=5, HINT_COST=4, DOOR_COST=8;
+const COLORS={red:{hex:"#ff6363",ko:"빨강",shape:"tri"},blue:{hex:"#58aaff",ko:"파랑",shape:"circle"},yellow:{hex:"#ffc842",ko:"노랑",shape:"square"}};
+const CABLE=["#ff8a5c","#5ccfff","#c7a0ff","#86e38f"];
+const $=s=>document.querySelector(s);
+const view=$("#view"), modal=$("#modal");
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const strip=h=>h.replace(/<[^>]+>/g,"");
+const shuffle=a=>{const b=a.slice();for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;};
+const TOTAL_DEV=ROOMS.reduce((n,r)=>n+r.devices.length,0);
+let S;
+function fresh(speed){return{speed:speed||"normal",room:0,o2:100,elapsed:0,running:false,solved:{},wrong:{},hinted:{},hints:0,firstTry:0,mistakes:[],over:false,escaped:false,doorOpen:{}};}
+S=fresh();
+
+/* ---------- sound ---------- */
+let AC=null, soundOn=true;
+function beep(f,d=.12,type="sine",v=.08,w=0){ if(!AC||!soundOn)return; const t=AC.currentTime+w,o=AC.createOscillator(),g=AC.createGain();
+  o.type=type;o.frequency.setValueAtTime(f,t);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+d);}
+const sfx={ok(){beep(660,.1,"triangle");beep(990,.16,"triangle",.08,.09);},bad(){beep(140,.28,"sawtooth",.07);beep(105,.3,"sawtooth",.06,.12);},
+  unlock(){[523,659,784,1046].forEach((f,i)=>beep(f,.18,"triangle",.07,i*.1));},alarm(){beep(880,.09,"square",.035);beep(880,.09,"square",.035,.16);},
+  key(){beep(1250,.035,"square",.025);},door(){beep(90,.8,"sawtooth",.05);beep(60,.9,"sine",.08,.1);}};
+$("#soundBtn").onclick=()=>{soundOn=!soundOn;$("#soundBtn").textContent=soundOn?"소리 켜짐":"소리 꺼짐";};
+
+/* ---------- HUD & O2 ---------- */
+function renderTrack(){
+  $("#track").innerHTML=ROOMS.map((r,i)=>`<div class="trk ${i<S.room||S.escaped?"done":i===S.room?"on":""}">${i<S.room||S.escaped?"✓ ":""}${r.name}</div>`).join("");
+}
+function updateHud(){
+  const v=Math.max(0,S.o2); $("#o2fill").style.width=v+"%"; $("#o2num").textContent=Math.ceil(v)+"%"; $("#o2bar").setAttribute("aria-valuenow",Math.ceil(v));
+  const s=Math.floor(S.elapsed); $("#clock").textContent=String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+  document.body.classList.toggle("critical",v<25&&!S.over&&S.running);
+}
+let last=performance.now(), alarmT=0;
+setInterval(()=>{ const now=performance.now(),dt=(now-last)/1000; last=now; if(!S.running||S.over)return;
+  S.elapsed+=dt; S.o2-=dt/SPEEDS[S.speed].sec; if(S.o2<25){alarmT+=dt;if(alarmT>3){alarmT=0;sfx.alarm();}} updateHud(); if(S.o2<=0)gameOver(); },250);
+function drain(n){ S.o2-=n; updateHud(); const f=$("#flash"); f.classList.remove("on"); void f.offsetWidth; f.classList.add("on"); if(S.o2<=0){gameOver();return true;} return false; }
+
+/* ---------- shapes ---------- */
+function shapeSVG(color,size=16,lit=true,digit){
+  const c=COLORS[color], fill=lit?c.hex:"none", st=c.hex;
+  const s=c.shape==="tri"?`<polygon points="8,1 15,15 1,15" fill="${fill}" stroke="${st}" stroke-width="2"/>`:c.shape==="circle"?`<circle cx="8" cy="8" r="6.5" fill="${fill}" stroke="${st}" stroke-width="2"/>`:`<rect x="1.5" y="1.5" width="13" height="13" fill="${fill}" stroke="${st}" stroke-width="2"/>`;
+  return `<svg class="shape" width="${size}" height="${size}" viewBox="0 0 16 16" aria-label="${c.ko}">${s}</svg>`;
+}
+function shapeIn(color,cx,cy,r,lit){ // inside scene svg
+  const c=COLORS[color], fill=lit?c.hex:"#1a1f2a", op=lit?1:.9;
+  const g=lit?` filter="url(#glow)"`:"";
+  if(c.shape==="tri") return `<polygon points="${cx},${cy-r} ${cx+r},${cy+r*.8} ${cx-r},${cy+r*.8}" fill="${fill}" stroke="${c.hex}" stroke-width="2" opacity="${op}"${g}/>`;
+  if(c.shape==="circle") return `<circle cx="${cx}" cy="${cy}" r="${r*.85}" fill="${fill}" stroke="${c.hex}" stroke-width="2" opacity="${op}"${g}/>`;
+  return `<rect x="${cx-r*.8}" y="${cy-r*.8}" width="${r*1.6}" height="${r*1.6}" fill="${fill}" stroke="${c.hex}" stroke-width="2" opacity="${op}"${g}/>`;
+}
+
+/* ---------- scene art ---------- */
+const SLOTS={1:{x:60,y:250,w:280,h:300},2:{x:395,y:290,w:410,h:250},3:{x:845,y:170,w:140,h:370}};
+function lampBadge(d,lx,ly){
+  if(!d.color) return "";
+  const lit=!!S.solved[d.id];
+  let s=shapeIn(d.color,lx,ly,10,lit);
+  if(lit) s+=`<text x="${lx}" y="${ly-20}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="30" font-weight="600" fill="${COLORS[d.color].hex}" filter="url(#glow)">${d.digit}</text>`;
+  return s;
+}
+function screenLines(x,y,w,h,n,col){ let s=""; for(let i=0;i<n;i++){ const lw=w*(.35+((i*37)%50)/100); s+=`<rect x="${x}" y="${y+i*(h/n)}" width="${lw}" height="${Math.max(2,h/n*.45)}" fill="${col}" opacity="${.45+((i*13)%40)/100}"/>`; } return s; }
+function desk(x,y,w,top){ return `<rect x="${x}" y="${top}" width="${w}" height="14" fill="url(#gm2)"/><rect x="${x}" y="${top+14}" width="${w}" height="4" fill="#0b0e15"/>
+ <rect x="${x+14}" y="${top+18}" width="12" height="${552-top-18}" fill="#202634"/><rect x="${x+w-26}" y="${top+18}" width="12" height="${552-top-18}" fill="#202634"/>`; }
+const ART={
+ terminal(d,{x,y,w,h}){ const top=y+h*.58; const solved=S.solved[d.id];
+  return desk(x,y,w,top)+`<rect x="${x+w*.1}" y="${y+10}" width="${w*.8}" height="${h*.48}" rx="8" fill="url(#gm)" stroke="#0b0e15" stroke-width="3"/>
+  <rect x="${x+w*.1+12}" y="${y+22}" width="${w*.8-24}" height="${h*.48-36}" rx="4" fill="${solved?"#062a1c":"#2a0b0d"}"/>
+  ${screenLines(x+w*.1+24,y+34,w*.8-60,h*.48-62,7,solved?"#5fe0a0":"#ff6b6b")}
+  <rect x="${x+w*.45}" y="${y+h*.48+10}" width="${w*.1}" height="${top-(y+h*.48+10)}" fill="#1a1f2b"/>
+  <rect x="${x+w*.22}" y="${top-12}" width="${w*.56}" height="12" rx="2" fill="#2b3242"/>`+lampBadge(d,x+w*.9-14,y+26); },
+ junction(d,{x,y,w,h}){ const bx=x+w*.25,bw=w*.5,by=y-20,bh=h*.55; const solved=S.solved[d.id]; let cables="";
+  CABLE.forEach((c,i)=>{ const sx=bx+30+i*(bw-60)/3; cables+= solved? `<path d="M${sx},${by+bh} C${sx},${by+bh+60} ${sx+40},${by+bh+40} ${sx+40},${y+h-10}" stroke="${c}" stroke-width="7" fill="none"/>`
+     : `<path d="M${sx},${by+bh} C${sx-10},${by+bh+50} ${sx+20},${by+bh+70} ${sx+8+i*6},${by+bh+95+i*12}" stroke="${c}" stroke-width="7" fill="none" stroke-linecap="round"/>`; });
+  return `<rect x="${x+w*.08}" y="${y+h-22}" width="${w*.84}" height="22" fill="#1b202c"/>
+  ${cables}<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="8" fill="url(#gm2)" stroke="#0b0e15" stroke-width="3"/>
+  <rect x="${bx+14}" y="${by+14}" width="${bw-28}" height="${bh-28}" rx="4" fill="none" stroke="#151a24" stroke-width="2"/>
+  <text x="${bx+bw/2}" y="${by+50}" text-anchor="middle" font-family="Chakra Petch,sans-serif" font-size="22" font-weight="700" fill="#e8b23a">O₂ VALVE</text>
+  <rect x="${bx+bw/2-60}" y="${by+62}" width="120" height="10" fill="url(#haz)"/>
+  ${solved?"":`<polyline class="spark" points="${bx+60},${by+bh+40} ${bx+70},${by+bh+30} ${bx+76},${by+bh+44} ${bx+86},${by+bh+32}" stroke="#fff3a0" stroke-width="3" fill="none"/>`}`+lampBadge(d,bx+bw-26,by+26); },
+ locker(d,{x,y,w,h}){ return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="url(#gm2)" stroke="#0b0e15" stroke-width="3"/>
+  ${[0,1,2,3,4].map(i=>`<rect x="${x+20}" y="${y+24+i*10}" width="${w-40}" height="4" fill="#151a24"/>`).join("")}
+  <rect x="${x+w-22}" y="${y+h*.45}" width="8" height="46" rx="3" fill="#9aa3b5"/>
+  <rect x="${x+w/2-34}" y="${y+h*.55}" width="68" height="40" rx="6" fill="#2a2f3a" stroke="#0b0e15"/>
+  ${[0,1,2,3].map(i=>`<rect x="${x+w/2-30+i*15.5}" y="${y+h*.55+6}" width="13" height="28" rx="2" fill="#c8a24a"/>`).join("")}
+  <text x="${x+w/2}" y="${y+h*.4}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="15" fill="#c8cfdd">RENTAL 07</text>
+  <rect x="${x+w/2-22}" y="${y+h*.47}" width="44" height="18" fill="#f2e8a0" transform="rotate(-6 ${x+w/2} ${y+h*.47})"/>`+lampBadge(d,x+w/2,y-14); },
+ printer(d,{x,y,w,h}){ const top=y+h*.6;
+  return desk(x,y,w,top)+`<path d="M${x+w*.2},${top-60} C${x+w*.15},${top-20} ${x+w*.3},${top+10} ${x+w*.28},${top+70} L${x+w*.38},${top+70} C${x+w*.4},${top+10} ${x+w*.3},${top-20} ${x+w*.32},${top-60}Z" fill="#e9edf3"/>
+  ${[0,1,2,3].map(i=>`<rect x="${x+w*.235}" y="${top-40+i*22}" width="${w*.06}" height="3" fill="#8a93a6"/>`).join("")}
+  <rect x="${x+w*.15}" y="${top-90}" width="${w*.7}" height="80" rx="8" fill="url(#gm)" stroke="#0b0e15" stroke-width="3"/>
+  <rect x="${x+w*.2}" y="${top-64}" width="${w*.36}" height="8" fill="#0a0d14"/>
+  <circle class="blink" cx="${x+w*.75}" cy="${top-62}" r="5" fill="#5fe0a0"/>`+lampBadge(d,x+w*.75,top-112); },
+ radio(d,{x,y,w,h}){ const solved=S.solved[d.id]; let wave=""; for(let i=0;i<=40;i++){ const px=x+w*.12+i*(w*.48/40); const amp=solved?10*Math.sin(i*.8):12*Math.sin(i*1.7)*Math.cos(i*.53)+((i*7)%9-4); wave+=`${px},${y+90+amp} `; }
+  return `<path d="M${x},${y+h} L${x+30},${y+40} L${x+w-30},${y+40} L${x+w},${y+h}Z" fill="url(#gm)" stroke="#0b0e15" stroke-width="3"/>
+  <rect x="${x+w*.1}" y="${y+56}" width="${w*.52}" height="70" rx="4" fill="#120d04"/><polyline points="${wave}" fill="none" stroke="#ffb547" stroke-width="2.5"/>
+  <circle cx="${x+w*.76}" cy="${y+92}" r="30" fill="#2b3242" stroke="#0b0e15" stroke-width="3"/><line x1="${x+w*.76}" y1="${y+92}" x2="${x+w*.76+20}" y2="${y+74}" stroke="#ffb547" stroke-width="4"/>
+  <circle cx="${x+w*.9}" cy="${y+150}" r="16" fill="#2b3242" stroke="#0b0e15" stroke-width="2"/>
+  ${[0,1,2,3,4,5].map(i=>`<rect x="${x+w*.12+i*34}" y="${y+150}" width="22" height="22" rx="3" fill="${i===2?"#ff6363":"#3a4256"}"/>`).join("")}
+  <text x="${x+w*.36}" y="${y+205}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="16" fill="#8f9ab6">${solved?"434.5 MHz · LINKED":"--- . - MHz · NO SIGNAL"}</text>
+  <path d="M${x+w*.86},${y+40} L${x+w*.9},${y-30}" stroke="#2b3242" stroke-width="6"/><circle cx="${x+w*.9}" cy="${y-34}" r="8" fill="#3a4256"/>`+lampBadge(d,x+w*.62,y+20); },
+ tablet(d,{x,y,w,h}){ return `<rect x="${x+w/2-10}" y="${y+h*.45}" width="20" height="${h*.55-8}" fill="#2a3040"/><rect x="${x+w/2-44}" y="${y+h-14}" width="88" height="14" rx="3" fill="#2a3040"/>
+  <g transform="rotate(-8 ${x+w/2} ${y+h*.32})"><rect x="${x+8}" y="${y+h*.14}" width="${w-16}" height="${h*.34}" rx="10" fill="#0a0d14" stroke="#4a5368" stroke-width="4"/>
+  <circle cx="${x+w/2}" cy="${y+h*.26}" r="22" fill="none" stroke="#6fd6ff" stroke-width="3"/>${[0,1,2,3,4].map(i=>`<rect x="${x+w/2-24+i*10}" y="${y+h*.34-(i%2?14:6)}" width="6" height="${i%2?28:12}" rx="2" fill="#6fd6ff"/>`).join("")}</g>`+lampBadge(d,x+w/2,y+20); },
+ freezer(d,{x,y,w,h}){ const tubes=["A","B","C","D","E"];
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="#aeb8cb" stroke="#0b0e15" stroke-width="3"/><rect x="${x+12}" y="${y+40}" width="${w-24}" height="${h*.5}" rx="4" fill="#0e2638" stroke="#7d8aa3" stroke-width="3"/>
+  ${tubes.map((t,i)=>`<rect x="${x+20+i*((w-40)/5)}" y="${y+70}" width="${(w-40)/5-6}" height="70" rx="5" fill="${["#7fd1ff","#ffb26b","#ff7a7a","#9ef0c2","#ff5a5a"][i]}" opacity=".85"/><text x="${x+20+i*((w-40)/5)+((w-40)/5-6)/2}" y="${y+160}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="13" fill="#cfe6ff">${t}</text>`).join("")}
+  <path d="M${x+12},${y+40} l30,0 l-14,16 l14,10 l-30,0z" fill="#e8f4ff" opacity=".35"/>
+  <text x="${x+w/2}" y="${y+28}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="13" fill="#2a3242">−20°C</text>
+  <rect x="${x+w-20}" y="${y+h*.65}" width="8" height="50" rx="3" fill="#59627a"/>`+lampBadge(d,x+w/2,y-16); },
+ monitor(d,{x,y,w,h}){ const bars=[60,95,40,120,80,105]; const by=y+150;
+  return `<rect x="${x+20}" y="${y+h-70}" width="${w-40}" height="70" fill="url(#gm)" stroke="#0b0e15" stroke-width="3"/>
+  <rect x="${x+40}" y="${y}" width="${w-80}" height="${h-90}" rx="8" fill="url(#gm2)" stroke="#0b0e15" stroke-width="3"/><rect x="${x+54}" y="${y+14}" width="${w-108}" height="${h-118}" rx="4" fill="#06131f"/>
+  ${bars.map((b,i)=>`<rect x="${x+80+i*44}" y="${by-b*.9+20}" width="26" height="${b*.9}" fill="${i===3?"#ffb547":"#58aaff"}" opacity=".85"/>`).join("")}
+  <line x1="${x+70}" y1="${by+20}" x2="${x+w-70}" y2="${by+20}" stroke="#58aaff" stroke-width="1" opacity=".5"/>
+  ${[0,1,2,3,4,5,6,7].map(i=>`<rect x="${x+50+i*40}" y="${y+h-50}" width="28" height="14" rx="2" fill="#3a4256"/>`).join("")}`+lampBadge(d,x+w-70,y+30); },
+ scope(d,{x,y,w,h}){ const top=y+h*.62;
+  return desk(x,y,w,top)+`<rect x="${x+w*.3}" y="${top-14}" width="${w*.34}" height="14" rx="3" fill="#d8dde6"/><path d="M${x+w*.36},${top-14} L${x+w*.4},${top-120} L${x+w*.48},${top-120} L${x+w*.46},${top-30} Z" fill="#c9cfdb"/>
+  <rect x="${x+w*.38}" y="${top-175}" width="22" height="70" rx="6" fill="#e6eaf0" transform="rotate(-20 ${x+w*.4} ${top-140})"/><rect x="${x+w*.42}" y="${top-70}" width="${w*.18}" height="8" fill="#9aa3b5"/>
+  <rect x="${x+w*.66}" y="${top-70}" width="${w*.26}" height="56" rx="4" fill="#0a0d14" stroke="#4a5368" stroke-width="3"/>${screenLines(x+w*.68,top-60,w*.18,36,4,S.solved[d.id]?"#5fe0a0":"#ffb547")}`+lampBadge(d,x+w*.8,top-92); },
+ core(d,{x,y,w,h}){ const cx=x+w/2;
+  return `<rect x="${cx-70}" y="${y-60}" width="140" height="${h}" rx="20" fill="url(#gcore)" filter="url(#glow)"/>
+  ${[0,1,2,3,4].map(i=>`<rect x="${cx-80}" y="${y-40+i*40}" width="160" height="10" rx="3" fill="#3a2a22"/>`).join("")}
+  <rect x="${x}" y="${y+h-110}" width="${w}" height="110" fill="url(#gm)" stroke="#0b0e15" stroke-width="3"/>
+  <rect x="${x+20}" y="${y+h-92}" width="${w*.45}" height="60" rx="3" fill="#120904"/>${screenLines(x+30,y+h-84,w*.38,44,4,"#ffb547")}
+  ${[0,1,2].map(i=>`<circle cx="${x+w*.62+i*46}" cy="${y+h-62}" r="15" fill="#2b3242" stroke="#0b0e15" stroke-width="2"/>`).join("")}`+lampBadge(d,x+w-30,y+h-130); },
+ valve(d,{x,y,w,h}){ const cx=x+w/2, cy=y+h*.42;
+  return `<rect x="${cx-26}" y="${y-60}" width="52" height="${h+60}" fill="url(#gm)"/><rect x="${cx-34}" y="${y+h*.2}" width="68" height="16" fill="#1a1f2b"/>
+  <circle cx="${cx}" cy="${cy}" r="${w*.42}" fill="none" stroke="#c0392b" stroke-width="12"/>${[0,60,120].map(a=>`<line x1="${cx}" y1="${cy}" x2="${cx+Math.cos(a*Math.PI/180)*w*.42}" y2="${cy+Math.sin(a*Math.PI/180)*w*.42}" stroke="#c0392b" stroke-width="8"/><line x1="${cx}" y1="${cy}" x2="${cx-Math.cos(a*Math.PI/180)*w*.42}" y2="${cy-Math.sin(a*Math.PI/180)*w*.42}" stroke="#c0392b" stroke-width="8"/>`).join("")}
+  <circle cx="${cx}" cy="${cy}" r="14" fill="#7a1f16"/>
+  <rect x="${cx-36}" y="${y+h*.72}" width="72" height="40" rx="6" fill="#2a2f3a" stroke="#0b0e15"/>${[0,1,2,3].map(i=>`<rect x="${cx-32+i*16.5}" y="${y+h*.72+6}" width="13" height="28" rx="2" fill="#c8a24a"/>`).join("")}
+  <text x="${cx}" y="${y+h*.68}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="13" fill="#ffd4a0">FUEL</text>`+lampBadge(d,cx,y-20); },
+ aria(d,{x,y,w,h}){ const cx=x+w/2, solved=S.solved[d.id];
+  return `<path d="M${x},${y+h} L${x+40},${y+60} L${x+w-40},${y+60} L${x+w},${y+h}Z" fill="url(#gm)" stroke="#0b0e15" stroke-width="3"/>
+  <circle cx="${cx}" cy="${y+20}" r="62" fill="#04090f" stroke="#4a5368" stroke-width="6"/><circle cx="${cx}" cy="${y+20}" r="34" fill="${solved?"#6fd6ff":"#ff5d62"}" filter="url(#glow)" class="${solved?"":"blink"}"/><circle cx="${cx}" cy="${y+20}" r="12" fill="#fff" opacity=".8"/>
+  ${[0,1,2,3,4,5,6,7,8].map(i=>`<rect x="${x+60+i*32}" y="${y+150}" width="22" height="14" rx="2" fill="#3a4256"/>`).join("")}
+  <text x="${cx}" y="${y+125}" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="15" fill="#8f9ab6">${solved?"MESSAGE RESTORED":"DATA CORRUPTED"}</text>`; },
+ suit(){ const x=90,y=230; return `<rect x="${x}" y="${y}" width="220" height="320" rx="6" fill="#151a24" stroke="#2b3242" stroke-width="3"/>
+  <circle cx="${x+110}" cy="${y+70}" r="38" fill="#e8ebf1"/><circle cx="${x+110}" cy="${y+72}" r="24" fill="#20314a"/><path d="M${x+60},${y+110} h100 l10,130 h-30 l-5,70 h-50 l-5,-70 h-30z" fill="#dfe3ea"/>
+  <rect x="${x+90}" y="${y+130}" width="40" height="30" rx="4" fill="#ffb547"/>`; },
+ sign(){ return `<rect x="860" y="200" width="110" height="140" rx="6" fill="#e8b23a"/><path d="M915,220 L950,290 L880,290Z" fill="#1a1a1a"/><rect x="911" y="240" width="8" height="28" fill="#e8b23a"/><circle cx="915" cy="278" r="5" fill="#e8b23a"/>
+  <text x="915" y="320" text-anchor="middle" font-family="Chakra Petch,sans-serif" font-weight="700" font-size="16" fill="#1a1a1a">VACUUM</text>`; }
+};
+
+function sceneSVG(room){
+  const T=room.tint, isAir=room.id==="airlock";
+  let stars=""; for(let i=0;i<40;i++){ stars+=`<circle cx="${470+((i*73)%260)}" cy="${80+((i*41)%160)}" r="${(i%3)*.5+.6}" fill="#fff" opacity="${.3+(i%5)/8}"/>`; }
+  let seams=""; for(let i=1;i<8;i++){ seams+=`<line x1="${i*150}" y1="60" x2="${i*150}" y2="462" stroke="#000" stroke-opacity=".35" stroke-width="2"/><line x1="${i*150+2}" y1="60" x2="${i*150+2}" y2="462" stroke="#fff" stroke-opacity=".04"/>`; }
+  let rivets=""; for(let i=0;i<40;i++){ rivets+=`<circle cx="${15+i*30}" cy="113" r="2.5" fill="#000" opacity=".35"/><circle cx="${15+i*30}" cy="425" r="2.5" fill="#000" opacity=".35"/>`; }
+  let grate=""; for(let i=-12;i<=12;i++){ grate+=`<line x1="${600+i*50}" y1="470" x2="${600+i*105}" y2="640" stroke="#000" stroke-opacity=".45" stroke-width="2"/>`; }
+  [500,540,590].forEach(yy=>grate+=`<line x1="0" y1="${yy}" x2="1200" y2="${yy}" stroke="#000" stroke-opacity=".4" stroke-width="2"/>`);
+  // devices
+  let devs="";
+  room.devices.forEach(d=>{
+    const sl=SLOTS[d.slot]; const solved=S.solved[d.id];
+    devs+=`<g class="hs" data-dev="${d.id}" tabindex="0" role="button" aria-label="${d.title}${solved?" (해결됨)":""}"><g class="art">${ART[d.art](d,sl)}</g>${solved?"":`<rect class="ping" x="${sl.x-10}" y="${sl.y-50}" width="${sl.w+20}" height="${sl.h+60}" rx="10"/>`}</g>`;
+  });
+  if(isAir){ devs=`<g opacity=".95">${ART.suit()}${ART.sign()}</g>`+devs; }
+  // manual clipboard
+  const manual=`<g class="hs" data-act="manual" tabindex="0" role="button" aria-label="매뉴얼 보기"><g class="art">
+    <rect x="352" y="140" width="76" height="100" rx="4" fill="#c9a76b"/><rect x="358" y="152" width="64" height="82" fill="#f3f1ea"/><rect x="376" y="134" width="28" height="12" rx="3" fill="#9aa3b5"/>
+    ${[0,1,2,3,4,5].map(i=>`<rect x="364" y="${164+i*11}" width="${i%2?40:52}" height="4" fill="#9aa3b5"/>`).join("")}
+    <text x="390" y="262" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="12" fill="#cfd6e4">MANUAL</text></g></g>`;
+  // door
+  let door="";
+  if(room.door){
+    const open=S.doorOpen[room.id];
+    const sym=room.door.map((c,i)=>{ const dev=room.devices.find(d=>d.color===c); return shapeIn(c,1046+i*42,92,9,!!(dev&&S.solved[dev.id])); }).join("");
+    door=`<g class="hs ${open?"open":""}" data-act="door" tabindex="0" role="button" aria-label="출입문 키패드"><g class="art">
+      <rect x="1008" y="110" width="164" height="362" fill="url(#haz)"/><rect x="1020" y="122" width="140" height="350" fill="#06080d"/>
+      <g class="door-l"><rect x="1020" y="122" width="70" height="350" fill="url(#gm2)" stroke="#0b0e15" stroke-width="2"/><rect x="1030" y="200" width="50" height="6" fill="#151a24"/><rect x="1030" y="380" width="50" height="6" fill="#151a24"/></g>
+      <g class="door-r"><rect x="1090" y="122" width="70" height="350" fill="url(#gm2)" stroke="#0b0e15" stroke-width="2"/><rect x="1100" y="200" width="50" height="6" fill="#151a24"/><rect x="1100" y="380" width="50" height="6" fill="#151a24"/>
+        <rect x="1118" y="270" width="30" height="44" rx="3" fill="#10141c" stroke="#59627a"/>${[0,1,2].map(r=>[0,1,2].map(c=>`<rect x="${1122+c*9}" y="${276+r*11}" width="6" height="7" fill="${open?"#5fe0a0":"#ffb547"}" opacity=".8"/>`).join("")).join("")}</g>
+      <rect x="1018" y="70" width="144" height="40" rx="4" fill="#05070c" stroke="#3a4256" stroke-width="2"/>${sym}
+      <text x="1090" y="490" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="13" fill="${open?"#5fe0a0":"#ff6363"}">${open?"OPEN":"LOCKED"}</text></g>
+      ${open?"":`<rect class="ping" x="998" y="60" width="184" height="440" rx="10"/>`}</g>`;
+  } else {
+    const ok=S.solved.a1;
+    door=`<g class="hs" data-act="hatch" tabindex="0" role="button" aria-label="탈출 포드 해치"><g class="art">
+      <circle cx="1090" cy="300" r="122" fill="url(#haz)"/><circle cx="1090" cy="300" r="106" fill="url(#gm2)" stroke="#0b0e15" stroke-width="4"/>
+      <circle cx="1090" cy="300" r="48" fill="#06090f" stroke="#59627a" stroke-width="5"/>${ok?`<circle cx="1090" cy="300" r="40" fill="#0b2a44"/><circle cx="1072" cy="286" r="8" fill="#9fd8ff" opacity=".7"/>`:""}
+      ${[0,45,90,135,180,225,270,315].map(a=>`<circle cx="${1090+Math.cos(a*Math.PI/180)*82}" cy="${300+Math.sin(a*Math.PI/180)*82}" r="6" fill="#151a24"/>`).join("")}
+      <text x="1090" y="450" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="14" fill="${ok?"#5fe0a0":"#ff6363"}">${ok?"ESCAPE POD · READY":"POD HATCH · LOCKED"}</text></g>${ok?`<circle class="ping" cx="1090" cy="300" r="134"/>`:""}</g>`;
+  }
+  return `<svg viewBox="0 0 1200 640" class="scene" role="group" aria-label="${room.name}">
+  <defs>
+   <linearGradient id="gw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${T.w1}"/><stop offset="1" stop-color="${T.w2}"/></linearGradient>
+   <linearGradient id="gf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c2130"/><stop offset="1" stop-color="#090b11"/></linearGradient>
+   <radialGradient id="ge" cx=".45" cy=".3" r=".7"><stop offset="0" stop-color="#7cc4ff"/><stop offset=".45" stop-color="#2f74d0"/><stop offset=".8" stop-color="#16407e"/><stop offset="1" stop-color="#0b1f45"/></radialGradient>
+   <linearGradient id="gm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#424b60"/><stop offset="1" stop-color="#232937"/></linearGradient>
+   <linearGradient id="gm2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a6378"/><stop offset=".5" stop-color="#3c4457"/><stop offset="1" stop-color="#2a3040"/></linearGradient>
+   <linearGradient id="gcore" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7a2a0c"/><stop offset=".5" stop-color="#ffb04a"/><stop offset="1" stop-color="#7a2a0c"/></linearGradient>
+   <radialGradient id="lightpool" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="${T.light}" stop-opacity=".18"/><stop offset="1" stop-color="${T.light}" stop-opacity="0"/></radialGradient>
+   <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+   <pattern id="haz" width="24" height="24" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="12" height="24" fill="#e0a92e"/><rect x="12" width="12" height="24" fill="#16181d"/></pattern>
+   <clipPath id="win"><rect x="470" y="80" width="260" height="160" rx="34"/></clipPath>
+  </defs>
+  <rect width="1200" height="470" fill="url(#gw)"/>
+  <rect x="0" y="0" width="1200" height="60" fill="#0c0f17"/><rect x="0" y="34" width="1200" height="16" fill="url(#gm)"/><rect x="0" y="54" width="1200" height="6" fill="#000" opacity=".4"/>
+  ${[120,560,880].map(x=>`<rect x="${x}" y="14" width="200" height="8" rx="4" fill="${T.light}" filter="url(#glow)"/>`).join("")}
+  ${seams}<rect y="108" width="1200" height="6" fill="#000" opacity=".25"/><rect y="418" width="1200" height="12" fill="#000" opacity=".25"/>${rivets}
+  <g><rect x="460" y="70" width="280" height="180" rx="42" fill="#2a3142" stroke="#0b0e15" stroke-width="3"/>
+   <g clip-path="url(#win)"><rect x="470" y="80" width="260" height="160" fill="#02040a"/>${stars}<circle cx="640" cy="420" r="230" fill="url(#ge)"/>
+   <circle cx="640" cy="420" r="232" fill="none" stroke="#9fd8ff" stroke-opacity=".5" stroke-width="6"/>
+   <path d="M520,250 C560,220 610,226 640,210 C670,198 700,214 730,206 L730,250Z" fill="#3f8f5a" opacity=".55"/></g>
+   <rect x="470" y="80" width="260" height="160" rx="34" fill="none" stroke="#59627a" stroke-width="4"/></g>
+  <rect y="460" width="1200" height="12" fill="#0d1018"/>
+  <rect y="470" width="1200" height="170" fill="url(#gf)"/>${grate}
+  ${[220,660,980].map(x=>`<ellipse cx="${x}" cy="520" rx="220" ry="40" fill="url(#lightpool)"/>`).join("")}
+  <rect x="0" y="425" width="1200" height="4" fill="${T.light}" opacity=".05"/>
+  ${manual}${devs}${door}
+  </svg>`;
+}
+
+/* ---------- screens ---------- */
+function titleScreen(){
+  closeModal(); $("#hud").hidden=true; S.running=false; document.body.classList.remove("critical");
+  view.innerHTML=`<div class="console"><div class="c-head"><span>EMERGENCY LOG · 2087</span><span><b>●</b> SIGNAL WEAK</span></div>
+  <div class="c-body">
+    <div class="eyebrow">Space Station Escape · English 2 · Lesson 7–8</div>
+    <h1>ORBIT<span>-7</span> 탈출</h1>
+    <p class="story">2087년, 지구 궤도 정거장 ORBIT-7. 운석 충돌로 정거장이 크게 손상되었다.
+승무원들은 모두 탈출선을 타고 떠났지만, 당신은 수면 캡슐에서 홀로 늦게 깨어났다.
+산소가 바닥나기 전에 다섯 구역을 지나 탈출 포드에 도착해야 한다.</p>
+    <div class="aria"><b>ARIA · 정거장 AI</b>방 안의 장치를 직접 눌러 조사하세요. 장치마다 영어 보안 퍼즐이 걸려 있어요. 틀리면 산소 −${WRONG_COST}%, 힌트는 −${HINT_COST}%, 문 비밀번호를 틀리면 −${DOOR_COST}%예요. 벽에 걸린 매뉴얼은 언제든 무료로 볼 수 있어요.</div>
+    <div style="display:grid;gap:8px"><span class="small">산소 소모 속도</span>
+      <div class="speed" id="speed">${Object.entries(SPEEDS).map(([k,v])=>`<button type="button" data-k="${k}" aria-pressed="${k===S.speed}">${v.label}</button>`).join("")}</div></div>
+    <div class="btn-row"><button class="btn" id="start" type="button">수면 캡슐 열기</button></div>
+    <p class="small">사역동사 · as 원급 as (L7) · 가주어 it · 의문사+to부정사 (L8) · 장치 ${TOTAL_DEV}개</p>
+  </div></div>`;
+  view.querySelectorAll("#speed button").forEach(b=>b.onclick=()=>{S.speed=b.dataset.k;view.querySelectorAll("#speed button").forEach(x=>x.setAttribute("aria-pressed",x===b));});
+  $("#start").onclick=()=>{ try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.resume&&AC.resume();}catch(e){}
+    const sp=S.speed; S=fresh(sp); $("#hud").hidden=false; renderTrack(); updateHud(); sfx.unlock(); briefing(); };
+}
+function briefing(){
+  const r=ROOMS[S.room]; S.running=false; renderTrack(); document.body.classList.remove("critical");
+  view.innerHTML=`<div class="console"><div class="c-head"><span><b>${S.room<4?`SECTOR 0${S.room+1} / 04`:"FINAL GATE"}</b> · ${r.en}</span><span>STATUS: LOCKED</span></div>
+  <div class="c-body"><div class="eyebrow">${r.en}</div><h2>${r.name}</h2><p class="story">${esc(r.story)}</p>
+  <div class="aria"><b>ARIA</b>${r.aria}</div>
+  <div class="btn-row"><button class="btn" id="go" type="button">${r.name} 들어가기</button><span class="small">들어가면 산소가 줄어들기 시작해요</span></div></div></div>`;
+  $("#go").onclick=roomView; $("#go").focus();
+}
+function roomView(){
+  const r=ROOMS[S.room]; S.running=true; last=performance.now(); renderTrack();
+  const spots=r.devices.map(d=>`<button class="spot ${S.solved[d.id]?"done":""}" type="button" data-dev="${d.id}">${d.color?shapeSVG(d.color,14,!!S.solved[d.id]):"◆"} ${d.title} <span class="st">${S.solved[d.id]?"복구됨":"조사 필요"}</span></button>`).join("")
+    + `<button class="spot" type="button" data-act="manual">매뉴얼 <span class="st">무료</span></button>`
+    + (r.door?`<button class="spot" type="button" data-act="door">출입문 키패드 <span class="st">${S.doorOpen[r.id]?"열림":"잠김"}</span></button>`:`<button class="spot" type="button" data-act="hatch">탈출 포드 해치 <span class="st">${S.solved.a1?"준비 완료":"잠김"}</span></button>`);
+  const left=r.devices.filter(d=>!S.solved[d.id]).length;
+  const tip = left? `장치 ${left}개가 아직 고장 나 있어요. 방 안의 깜빡이는 곳을 눌러 보세요.` : (r.door?"램프가 모두 켜졌어요! 문 위 표시판의 모양 순서대로 숫자를 입력하세요.":"메시지가 복구되었어요. 해치를 눌러 탈출하세요!");
+  view.innerHTML=`<div class="scene-box">${sceneSVG(r)}</div>
+    <div class="aria-bar"><span class="eye"></span><span><b style="font-family:var(--f-mono);color:var(--o2);font-size:12px;letter-spacing:.12em">ARIA · ${r.en}</b><br>${tip}</span></div>
+    <div class="spots">${spots}</div>`;
+  view.querySelectorAll("[data-dev],[data-act]").forEach(el=>{
+    const act=()=>{ if(el.dataset.dev) openDevice(r.devices.find(d=>d.id===el.dataset.dev)); else if(el.dataset.act==="manual") openManual(r); else if(el.dataset.act==="door") openDoor(r); else if(el.dataset.act==="hatch") tryHatch(); };
+    el.addEventListener("click",act); el.addEventListener("keydown",e=>{ if(el.tagName!=="BUTTON"&&(e.key==="Enter"||e.key===" ")){e.preventDefault();act();} });
+  });
+}
+
+/* ---------- modal shell ---------- */
+function shell(title,sub,color,inner,tools=true){
+  return `<div class="dev" role="dialog" aria-modal="true" aria-label="${esc(title)}"><span class="screw a"></span><span class="screw b"></span><span class="screw c"></span><span class="screw d"></span>
+   <div class="dev-top">${color?shapeSVG(color,20,false):""}<div class="t">${esc(sub)}<b>${esc(title)}</b></div><button class="close" type="button" id="mclose">닫기</button></div>
+   <div class="glass">${inner}<div class="msg" id="msg" role="status"></div></div>
+   ${tools?`<div class="tools"><button class="hint-btn" id="hint" type="button">ARIA 힌트 (O₂ −${HINT_COST}%)</button><span class="hint-box" id="hintbox"></span></div>`:""}</div>`;
+}
+let onModalClose=null;
+function openModal(html){ modal.innerHTML=html; modal.hidden=false; $("#mclose").onclick=closeModal; modal.onclick=e=>{ if(e.target===modal) closeModal(); };
+  document.onkeydown=e=>{ if(e.key==="Escape") closeModal(); }; setTimeout(()=>{ const f=modal.querySelector(".glass button, .glass input"); const t=f||$("#mclose"); if(t) t.focus(); },30); }
+function closeModal(){ modal.hidden=true; modal.innerHTML=""; document.onkeydown=null; const cb=onModalClose; onModalClose=null; if(cb) cb(); }
+function msg(t){ const m=$("#msg"); if(m) m.textContent=t; }
+function shakeDev(){ const d=modal.querySelector(".dev"); if(!d) return; d.classList.remove("shake"); void d.offsetWidth; d.classList.add("shake"); }
+
+function openManual(r){
+  openModal(shell("코드 매뉴얼",r.en+" · MANUAL",null,`<div class="manual">${r.manual.map(([h,m,ex])=>`<div class="sec"><b>${esc(h)}</b><span>${esc(m)}</span>${ex?`<span class="ex">${esc(ex)}</span>`:""}</div>`).join("")}</div>`,false));
+}
+
+/* ---------- devices ---------- */
+function fail(dev,given){
+  sfx.bad(); shakeDev();
+  if(!S.wrong[dev.id]){ S.wrong[dev.id]=1; S.mistakes.push({room:ROOMS[S.room].name,title:dev.title,given,answer:dev.review,explain:dev.explain}); }
+  msg(`접근 거부 · 산소 −${WRONG_COST}%`); drain(WRONG_COST);
+}
+function solve(dev){
+  if(S.solved[dev.id]) return;
+  S.solved[dev.id]=1; if(!S.wrong[dev.id]) S.firstTry++; sfx.ok(); setTimeout(sfx.unlock,250);
+  const g=modal.querySelector(".glass"); g.querySelectorAll("button,input").forEach(b=>b.disabled=true);
+  const hb=$("#hint"); if(hb) hb.disabled=true;
+  const box=document.createElement("div"); box.className="solved unlock";
+  box.innerHTML=`<span class="t">ACCESS GRANTED</span><div>${dev.explain}</div>
+    ${dev.color?`<div class="big-digit">${shapeSVG(dev.color,34,true)}<span style="color:${COLORS[dev.color].hex}">${dev.digit}</span><span class="small" style="font-size:14px">${COLORS[dev.color].ko} 램프에 숫자가 켜졌다</span></div>`:""}
+    <div class="btn-row"><button class="btn" id="back" type="button">${dev.kind==="tapmulti"?"해치로 가기":"방으로 돌아가기"}</button></div>`;
+  g.appendChild(box); msg("");
+  $("#back").disabled=false; $("#back").onclick=closeModal; $("#back").focus();
+  onModalClose=()=>{ if(!S.over) roomView(); };
+}
+
+function openDevice(dev){
+  if(S.over) return;
+  const R=RENDER[dev.kind](dev);
+  const sub=S.solved[dev.id]?"RESTORED":"MALFUNCTION";
+  openModal(shell(dev.title,sub,dev.color,`<p class="prompt">${esc(dev.prompt)}</p>${R.html}`));
+  if(S.solved[dev.id]){ modal.querySelector(".glass").querySelectorAll("button,input").forEach(b=>b.disabled=true); $("#hint").disabled=true;
+    msg(""); const g=modal.querySelector(".glass"); const box=document.createElement("div"); box.className="solved"; box.innerHTML=`<span class="t">RESTORED</span><div>${dev.explain}</div>`; g.appendChild(box); return; }
+  const hb=$("#hint");
+  if(S.hinted[dev.id]){ hb.disabled=true; $("#hintbox").textContent=dev.hint; }
+  hb.onclick=()=>{ if(S.hinted[dev.id]) return; S.hinted[dev.id]=1; S.hints++; hb.disabled=true; $("#hintbox").textContent=dev.hint; R.onHint&&R.onHint(); drain(HINT_COST); };
+  R.bind(modal.querySelector(".glass"));
+}
+
+const RENDER={
+ multi(dev){
+  return { html:`<div class="opts">${dev.lines.map((l,i)=>`<button class="line-btn" type="button" aria-pressed="false" data-i="${i}"><span class="k">${i+1}</span><span>${esc(l[0])}</span></button>`).join("")}</div>
+    <div class="btn-row"><button class="btn" id="send" type="button">${dev.mode==="wrong"?"선택한 기록 삭제":"선택한 기록 저장"}</button><span class="small" id="cnt">0개 선택</span></div>`,
+   bind(g){ const bs=[...g.querySelectorAll(".line-btn")];
+     bs.forEach(b=>b.onclick=()=>{ b.setAttribute("aria-pressed",b.getAttribute("aria-pressed")!=="true"); sfx.key(); $("#cnt").textContent=bs.filter(x=>x.getAttribute("aria-pressed")==="true").length+"개 선택"; });
+     $("#send").onclick=()=>{ const sel=bs.filter(x=>x.getAttribute("aria-pressed")==="true").map(x=>+x.dataset.i);
+       if(!sel.length){ msg("하나 이상 고르세요."); return; }
+       const target=dev.lines.map((l,i)=>[l,i]).filter(([l])=>dev.mode==="wrong"?!l[1]:l[1]).map(([,i])=>i);
+       if(sel.length===target.length&&target.every(i=>sel.includes(i))) solve(dev); else fail(dev,sel.map(i=>i+1).join("·")+"번"); }; } };
+ },
+ wires(dev){
+  const right=shuffle(dev.right.map((t,i)=>i));
+  return { html:`<div class="wires"><div class="wcol">${dev.left.map((l,i)=>`<button class="wl" type="button" data-i="${i}" aria-pressed="false" style="color:${CABLE[i]}"><span class="plug fill"></span><span style="color:var(--fg)">${esc(l[0])} …<small>${esc(l[1])}</small></span></button>`).join("")}</div>
+    <div class="wcol">${right.map(j=>`<button class="wr" type="button" data-j="${j}"><span>${esc(dev.right[j])}</span><span class="plugs"></span></button>`).join("")}</div></div>
+    <div class="btn-row"><button class="btn" id="send" type="button">전원 연결</button><button class="btn ghost" id="clr" type="button">전선 분리</button></div>`,
+   bind(g){ let sel=null; const conn={}; const L=[...g.querySelectorAll(".wl")], Rb=[...g.querySelectorAll(".wr")];
+     const draw=()=>{ Rb.forEach(b=>{ const j=+b.dataset.j; b.querySelector(".plugs").innerHTML=Object.entries(conn).filter(([,v])=>v===j).map(([k])=>`<span class="plug fill" style="color:${CABLE[k]}"></span>`).join(""); });
+       L.forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.i===sel))); };
+     L.forEach(b=>b.onclick=()=>{ sel=+b.dataset.i; sfx.key(); draw(); });
+     Rb.forEach(b=>b.onclick=()=>{ const j=+b.dataset.j; if(sel===null){ for(const k in conn) if(conn[k]===j) delete conn[k]; draw(); return; }
+       for(const k in conn) if(conn[k]===j) delete conn[k]; conn[sel]=j; sfx.key(); const nxt=L.find(x=>conn[x.dataset.i]===undefined); sel=nxt?+nxt.dataset.i:null; draw(); });
+     $("#clr").onclick=()=>{ for(const k in conn) delete conn[k]; sel=0; draw(); };
+     $("#send").onclick=()=>{ if(Object.keys(conn).length<dev.left.length){ msg("전선 4개를 모두 연결하세요."); return; }
+       const ok=dev.left.every((l,i)=>dev.right[conn[i]]===l[2]);
+       if(ok) solve(dev); else fail(dev,dev.left.map((l,i)=>l[0]+" "+dev.right[conn[i]]).join(" / ")); };
+     sel=0; draw(); } };
+ },
+ wheel(dev){
+  const n=dev.pattern.replace(/[^#]/g,"").length, cs=dev.charset;
+  let pos=Array.from({length:n},()=>Math.floor(Math.random()*cs.length));
+  if(dev.answer.includes(pos.map(i=>cs[i]).join(""))) pos[0]=(pos[0]+1)%cs.length;
+  let k=0; const parts=dev.pattern.split("").map(ch=>ch==="#"?`<div class="wheel"><button type="button" data-w="${k}" data-d="1" aria-label="${k+1}번째 위로">▲</button><div class="ch" id="w${k}"></div><button type="button" data-w="${k++}" data-d="-1" aria-label="아래로">▼</button></div>`:`<span class="dot">${ch}</span>`).join("");
+  return { html:`<div class="clue">${dev.clue}</div><div class="wheels">${parts}${dev.charset.length===10?'<span class="unit">MHz</span>':""}</div>
+    <div class="btn-row"><button class="btn" id="send" type="button">${dev.charset.length===10?"주파수 송신":"잠금 해제"}</button></div>`,
+   bind(g){ const draw=()=>pos.forEach((p,i)=>$("#w"+i).textContent=cs[p]); draw();
+     g.querySelectorAll(".wheel button").forEach(b=>b.onclick=()=>{ const i=+b.dataset.w; pos[i]=(pos[i]+ +b.dataset.d+cs.length)%cs.length; sfx.key(); draw(); });
+     $("#send").onclick=()=>{ const v=pos.map(i=>cs[i]).join(""); if(dev.answer.includes(v)) solve(dev); else fail(dev,v); }; } };
+ },
+ order(dev){
+  let ord=shuffle(dev.chips.map((c,i)=>i)); let gd=0; while(ord.slice(0,dev.answer.length).map(i=>dev.chips[i]).join(" ")===dev.answer.join(" ")&&gd++<10) ord=shuffle(ord);
+  return { html:`${dev.ko?`<p class="ko">${esc(dev.ko)}</p>`:""}${dev.en?`<p class="en">${esc(dev.en)}</p>`:""}<div class="order-line" id="line"></div><div class="pool" id="pool"></div>
+    <div class="btn-row"><button class="btn" id="send" type="button">명령 전송</button><button class="btn ghost" id="rst" type="button">다시 배열</button></div>`,
+   bind(g){ const pool=$("#pool"), line=$("#line");
+     ord.forEach(i=>{ const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=dev.chips[i]; b.onclick=()=>{ sfx.key(); (b.parentElement===pool?line:pool).appendChild(b); }; pool.appendChild(b); });
+     $("#rst").onclick=()=>[...line.children].forEach(c=>pool.appendChild(c));
+     $("#send").onclick=()=>{ const got=[...line.children].map(c=>c.textContent); if(!got.length){ msg("조각을 먼저 배열하세요."); return; }
+       if(got.join(" ")===dev.answer.join(" ")) solve(dev); else fail(dev,got.join(" ")); }; } };
+ },
+ choice(dev){
+  const order=dev.fixed?dev.options.map((o,i)=>i):shuffle(dev.options.map((o,i)=>i));
+  return { html:`${dev.table?`<div style="overflow-x:auto"><table class="data">${dev.table.map((r,i)=>`<tr>${r.map(c=>i?`<td>${c}</td>`:`<th>${c}</th>`).join("")}</tr>`).join("")}</table></div>`:""}
+    ${dev.clue?`<div class="clue">${dev.clue}</div>`:""}${dev.en?`<p class="en">${esc(dev.en)}</p>`:""}
+    <div class="opts">${order.map((i,k)=>`<button class="opt" type="button" data-i="${i}"><span class="k">${"ABCDE"[k]}</span><span>${esc(dev.options[i])}</span></button>`).join("")}</div>`,
+   bind(g){ g.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; if(i===dev.answer) solve(dev); else { b.disabled=true; fail(dev,dev.options[i]); } }); },
+   onHint(){ const w=[...modal.querySelectorAll(".opt")].filter(b=>+b.dataset.i!==dev.answer&&!b.disabled); if(w.length>1) shuffle(w)[0].disabled=true; } };
+ },
+ fix(dev){
+  return { html:`<div id="fixarea"></div>`,
+   bind(g){ let step=0; const area=$("#fixarea");
+     const render=()=>{ const [sent,opts]=dev.items[step]; const toks=sent.split(" ");
+       area.innerHTML=`<p class="small">오류 문장 ${step+1} / ${dev.items.length}</p><div class="tokens">${toks.map((t,i)=>`<button class="tok" type="button" data-i="${i}" aria-pressed="false">${esc(t.replace(/^\*/,""))}</button>`).join("")}</div><div id="fixopts"></div>`;
+       area.querySelectorAll(".tok").forEach(b=>b.onclick=()=>{ const i=+b.dataset.i; area.querySelectorAll(".tok").forEach(x=>x.setAttribute("aria-pressed",x===b));
+         if(!toks[i].startsWith("*")){ fail(dev,toks[i]); return; }
+         msg(""); sfx.key(); area.querySelectorAll(".tok").forEach(x=>x.disabled=true);
+         const ord=shuffle(opts.map((o,k)=>k));
+         $("#fixopts").innerHTML=`<p class="prompt" style="margin:8px 0">'${esc(toks[i].replace(/^\*/,""))}'을(를) 무엇으로 고칠까요?</p><div class="opts">${ord.map((k,n)=>`<button class="opt" type="button" data-k="${k}"><span class="k">${"ABCD"[n]}</span><span>${esc(opts[k])}</span></button>`).join("")}</div>`;
+         $("#fixopts").querySelectorAll(".opt").forEach(o=>o.onclick=()=>{ const k=+o.dataset.k; if(k!==0){ o.disabled=true; fail(dev,toks[i]+" → "+opts[k]); return; }
+           sfx.ok(); step++; if(step>=dev.items.length) solve(dev); else render(); });
+       }); };
+     render(); } };
+ },
+ classify(dev){
+  return { html:`<div class="cls">${dev.items.map((it,i)=>`<div class="cls-row"><span class="en"><span style="color:var(--phosphor)">${i+1}</span> ${esc(it[0]).replace(/\b(It|it)\b/,"<mark>$1</mark>")}</span>
+     <div class="seg" data-i="${i}">${dev.cats.map((c,k)=>`<button type="button" data-k="${k}" aria-pressed="false">${c}</button>`).join("")}</div></div>`).join("")}</div>
+     <div class="btn-row"><button class="btn" id="send" type="button">분석 완료</button></div>`,
+   bind(g){ const pick={}; g.querySelectorAll(".seg").forEach(s=>s.querySelectorAll("button").forEach(b=>b.onclick=()=>{ pick[s.dataset.i]=+b.dataset.k; s.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b)); sfx.key(); }));
+     $("#send").onclick=()=>{ if(Object.keys(pick).length<dev.items.length){ msg("모든 문장을 분류하세요."); return; }
+       if(dev.items.every((it,i)=>pick[i]===it[1])) solve(dev); else fail(dev,dev.items.map((it,i)=>(i+1)+dev.cats[pick[i]]).join(" ")); }; } };
+ },
+ tapmulti(dev){
+  const toks=dev.text.split(" ");
+  return { html:`<div class="tokens">${toks.map((t,i)=>`<button class="tok" type="button" data-i="${i}" aria-pressed="false">${esc(t.replace(/^\*/,""))}</button>`).join("")}</div>
+    <div class="btn-row"><button class="btn" id="send" type="button">수정 사항 전송</button><span class="small" id="cnt">0개 표시</span></div>`,
+   bind(g){ const bs=[...g.querySelectorAll(".tok")];
+     bs.forEach(b=>b.onclick=()=>{ b.setAttribute("aria-pressed",b.getAttribute("aria-pressed")!=="true"); sfx.key(); $("#cnt").textContent=bs.filter(x=>x.getAttribute("aria-pressed")==="true").length+"개 표시"; });
+     $("#send").onclick=()=>{ const sel=bs.filter(x=>x.getAttribute("aria-pressed")==="true").map(x=>+x.dataset.i);
+       const target=toks.map((t,i)=>t.startsWith("*")?i:-1).filter(i=>i>=0);
+       if(!sel.length){ msg("틀린 단어를 눌러 표시하세요."); return; }
+       if(sel.length===target.length&&target.every(i=>sel.includes(i))) solve(dev); else fail(dev,sel.map(i=>toks[i].replace(/^\*/,"")).join(", ")); }; } };
+ }
+};
+
+/* ---------- door ---------- */
+function openDoor(r){
+  if(S.over) return;
+  if(S.doorOpen[r.id]){ goCleared(r); return; }
+  let entry="";
+  const sym=r.door.map(c=>{ const dev=r.devices.find(d=>d.color===c); return shapeSVG(c,30,!!S.solved[dev.id]); }).join('<span class="small">→</span>');
+  openModal(shell("출입문 키패드","DOOR CONTROL",null,`
+    <p class="prompt">방 안 장치의 램프에 켜진 숫자를 이 모양 순서대로 입력하세요. 틀리면 산소 −${DOOR_COST}%</p>
+    <div class="keypad-wrap"><div style="display:grid;gap:14px"><div class="order-sym">${sym}</div><div class="slots" id="slots">${"<div class='slot'></div>".repeat(3)}</div></div>
+    <div class="keys" id="keys">${[1,2,3,4,5,6,7,8,9].map(n=>`<button type="button" data-n="${n}">${n}</button>`).join("")}<button type="button" data-n="del" aria-label="지우기">⌫</button><button type="button" data-n="0">0</button><button type="button" class="go" data-n="go" aria-label="열기">OPEN</button></div></div>`,false));
+  const show=()=>[...$("#slots").children].forEach((s,i)=>s.textContent=entry[i]||"");
+  const press=n=>{ if(S.over) return;
+    if(n==="del") entry=entry.slice(0,-1);
+    else if(n==="go"){ if(entry.length<3){ msg("세 자리를 모두 입력하세요."); return; }
+      const code=r.door.map(c=>r.devices.find(d=>d.color===c).digit).join("");
+      if(entry===code){ sfx.door(); closeModal(); roomView(); S.running=false; S.doorOpen[r.id]=1; requestAnimationFrame(()=>requestAnimationFrame(()=>{ const g=view.querySelector('g[data-act="door"]'); if(g){ g.classList.add("open"); const pg=g.querySelector(".ping"); if(pg) pg.remove(); } })); setTimeout(()=>goCleared(r),1500); return; }
+      sfx.bad(); shakeDev(); msg(`잠금 해제 실패 · 산소 −${DOOR_COST}%`); entry=""; if(drain(DOOR_COST)) return; }
+    else if(entry.length<3){ entry+=n; sfx.key(); }
+    show(); };
+  $("#keys").onclick=e=>{ const b=e.target.closest("button"); if(b) press(b.dataset.n); };
+  document.onkeydown=e=>{ if(e.key==="Escape") closeModal(); else if(/^[0-9]$/.test(e.key)) press(e.key); else if(e.key==="Backspace") press("del"); else if(e.key==="Enter") press("go"); };
+}
+function goCleared(r){
+  if(S.over) return; S.running=false;
+  if(r.refill&&!S.refilled){ S.refilled=1; S.o2=Math.min(100,S.o2+r.refill); updateHud(); }
+  sfx.unlock(); document.body.classList.remove("critical");
+  view.innerHTML=`<div class="console"><div class="c-head"><span><b>${r.en}</b> · ${r.name}</span><span style="color:var(--ok)">DOOR OPEN</span></div>
+   <div class="c-body"><div class="eyebrow">Sector Cleared</div><h2>${r.name} 통과</h2><p class="story">${esc(r.cleared)}</p>
+   <div class="btn-row"><button class="btn" id="nx" type="button">다음 구역으로</button></div></div></div>`;
+  $("#nx").onclick=()=>{ S.room++; briefing(); }; $("#nx").focus();
+}
+function tryHatch(){
+  if(!S.solved.a1){ sfx.bad(); openModal(shell("탈출 포드 해치","POD HATCH",null,`<p class="prompt">해치가 잠겨 있다. ARIA 메인 콘솔의 손상된 메시지를 먼저 복구해야 한다.</p>`,false)); return; }
+  escapeEnd();
+}
+
+/* ---------- endings ---------- */
+function reviewHtml(){
+  if(!S.mistakes.length) return `<div class="aria"><b>ARIA</b>모든 장치를 한 번에 해결했어요. 완벽한 탈출이에요!</div>`;
+  return `<div style="display:grid;gap:10px"><div class="eyebrow">오답 노트 · ${S.mistakes.length}개 장치</div><div class="review">${S.mistakes.map(x=>`
+   <div class="rv"><span class="m">${esc(x.room)} · ${esc(x.title)}</span><span>처음 낸 답: ${esc(x.given)}</span><span class="a">정답: ${esc(x.answer)}</span><span class="small">${strip(x.explain)}</span></div>`).join("")}</div></div>`;
+}
+function escapeEnd(){
+  closeModal(); S.running=false; S.escaped=true; S.over=true; renderTrack(); document.body.classList.remove("critical"); sfx.unlock(); setTimeout(sfx.unlock,450);
+  const acc=Math.round(S.firstTry/TOTAL_DEV*100), o2=Math.max(0,Math.ceil(S.o2));
+  const score=o2*.4+acc*.6-S.hints*2; const grade=score>=80?"S":score>=65?"A":score>=50?"B":"C";
+  const s=Math.floor(S.elapsed);
+  view.innerHTML=`<div class="console"><div class="c-head"><span><b>ESCAPE POD</b> · LAUNCHED</span><span style="color:var(--ok)">RESCUE CONFIRMED</span></div><div class="c-body">
+   <svg class="pod launch" viewBox="0 0 80 120" aria-hidden="true"><path d="M40 4 C60 24 64 52 62 84 L18 84 C16 52 20 24 40 4Z" fill="#e8ecf6"/><circle cx="40" cy="44" r="10" fill="#6fd6ff"/><path d="M18 70 L6 92 L18 88Z M62 70 L74 92 L62 88Z" fill="#ffb547"/><path d="M26 86 L40 118 L54 86Z" fill="#ffb547" opacity=".85"/></svg>
+   <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap"><div class="grade unlock">${grade}</div><div style="display:grid;gap:6px;min-width:0;flex:1 1 240px"><div class="eyebrow">Mission Complete</div><h2>ORBIT-7 탈출 성공!</h2><p class="story">탈출 포드가 정거장을 떠났다. 창밖으로 푸른 지구가 가까워진다.</p></div></div>
+   <div class="stats"><div class="stat"><div class="v">${Math.floor(s/60)}분 ${s%60}초</div><div class="l">걸린 시간</div></div><div class="stat"><div class="v" style="color:var(--o2)">${o2}%</div><div class="l">남은 산소</div></div>
+   <div class="stat"><div class="v">${S.firstTry}/${TOTAL_DEV}</div><div class="l">한 번에 해결한 장치</div></div><div class="stat"><div class="v">${S.hints}</div><div class="l">힌트 사용</div></div></div>
+   ${reviewHtml()}<div class="btn-row"><button class="btn" id="again" type="button">다시 도전</button></div></div></div>`;
+  $("#again").onclick=titleScreen;
+}
+function gameOver(){
+  if(S.over) return; S.over=true; S.running=false; S.o2=0; updateHud(); closeModal(); document.body.classList.remove("critical"); sfx.bad();
+  const r=ROOMS[S.room];
+  view.innerHTML=`<div class="console"><div class="c-head"><span><b style="color:var(--alert)">O₂ DEPLETED</b></span><span>SIGNAL LOST</span></div><div class="c-body">
+   <div class="eyebrow" style="color:var(--alert)">Mission Failed</div><h2>산소가 모두 떨어졌다</h2>
+   <p class="story">시야가 흐려진다… ${r.name}에서 의식을 잃었다.
+정신을 차려 보니 다시 수면 캡슐 안이다.</p>
+   <p class="small">통과한 구역 ${S.room} / 4 · 해결한 장치 ${Object.keys(S.solved).length} / ${TOTAL_DEV}</p>
+   ${reviewHtml()}<div class="btn-row"><button class="btn" id="again" type="button">처음부터 다시</button></div></div></div>`;
+  $("#again").onclick=titleScreen;
+}
+
+/* ---------- starfield ---------- */
+(function(){ const c=$("#stars"),x=c.getContext("2d"); let W,H,st=[]; const red=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function size(){ W=c.width=innerWidth*devicePixelRatio; H=c.height=innerHeight*devicePixelRatio; st=Array.from({length:Math.round(innerWidth*innerHeight/3500)},()=>({x:Math.random()*W,y:Math.random()*H,z:Math.random()*.9+.1})); }
+  size(); addEventListener("resize",size);
+  (function f(){ x.fillStyle="#080b13"; x.fillRect(0,0,W,H); const g=x.createRadialGradient(W*.82,H*1.05,0,W*.82,H*1.05,H*.7); g.addColorStop(0,"rgba(70,120,220,.2)"); g.addColorStop(1,"rgba(8,11,19,0)"); x.fillStyle=g; x.fillRect(0,0,W,H);
+    for(const s of st){ if(!red){ s.x-=s.z*.25*devicePixelRatio; if(s.x<0){s.x=W;s.y=Math.random()*H;} } x.fillStyle=`rgba(220,230,255,${.25+s.z*.6})`; x.fillRect(s.x,s.y,s.z*1.8*devicePixelRatio,s.z*1.8*devicePixelRatio); }
+    if(!red) requestAnimationFrame(f); })();
+})();
+
+titleScreen();
+</script>
